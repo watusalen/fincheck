@@ -1,0 +1,25 @@
+{
+  "name": "fincheck",
+  "version": "1.0.0",
+  "description": "FinCheck é um gerenciador financeiro pessoal desenvolvido como projeto acadêmico. Permite registrar receitas e despesas, definir metas, acompanhar gráficos e histórico, com dados persistidos no Firebase. Aplicação web leve, modular e de fácil uso.",
+  "scripts": {
+    "dev": "parcel public/index.html",
+    "build": "parcel build public/index.html",
+    "start": "npm run dev"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/watusalen/fincheck.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/watusalen/fincheck/issues"
+  },
+  "homepage": "https://github.com/watusalen/fincheck#readme",
+  "devDependencies": {
+    "parcel": "^2.15.4",
+    "typescript": "^5.8.3"
+  }
+}
