@@ -1,0 +1,36 @@
+# Diretórios gerados automaticamente
+dist/
+build/
+
+# Cache e arquivos temporários
+.cache/
+.parcel-cache/
+*.log
+*.tmp
+
+# Dependências
+node_modules/
+
+# Variáveis de ambiente
+.env
+.env.*
+
+# Arquivos do sistema e do editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Firebase (caso esteja usando emuladores ou configs locais)
+firebase-debug.log
+.firebaserc
+.firebase/
+
+# Arquivos de lock, caso não queira versionar (opcional)
+# package-lock.json
+# yarn.lock
+
+# Arquivos específicos da IDE ou SO
+*.bak
