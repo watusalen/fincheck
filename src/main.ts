@@ -1,0 +1,1 @@
+console.log('Os Três Bits estão na área! Setup inicializado com sucesso!');
