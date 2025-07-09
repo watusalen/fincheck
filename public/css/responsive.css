@@ -1,0 +1,91 @@
+/* Responsive Design */
+@media (max-width: 1024px) {
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .chart-section {
+        order: -1;
+    }
+}
+
+@media (max-width: 768px) {
+    .main-layout {
+        flex-direction: column;
+    }
+
+    .sidebar {
+        width: 100%;
+        height: auto;
+    }
+
+    .sidebar-nav {
+        padding: 0.5rem 0;
+    }
+
+    .sidebar-nav ul {
+        display: flex;
+        overflow-x: auto;
+        gap: 0.5rem;
+        padding: 0 1rem;
+    }
+
+    .nav-item {
+        margin-bottom: 0;
+        white-space: nowrap;
+    }
+
+    .main-content {
+        padding: 1rem;
+    }
+
+    .financial-cards {
+        gap: 1rem;
+    }
+
+    .quick-actions {
+        grid-template-columns: 1fr;
+    }
+
+    .history-layout {
+        flex-direction: column;
+    }
+
+    .history-sidebar {
+        width: 100%;
+        margin-bottom: 1rem;
+    }
+
+    .months-list {
+        display: flex;
+        gap: 0.5rem;
+        overflow-x: auto;
+        padding-bottom: 0.5rem;
+    }
+
+    .month-item {
+        margin-bottom: 0;
+        white-space: nowrap;
+    }
+
+    .history-chart-container {
+        height: 300px;
+    }
+}
+
+@media (max-width: 480px) {
+
+    .login-container,
+    .register-container {
+        margin: 1rem;
+        padding: 1.5rem;
+    }
+
+    .financial-card {
+        padding: 1rem;
+    }
+
+    .card-value {
+        font-size: 1.5rem;
+    }
+}
