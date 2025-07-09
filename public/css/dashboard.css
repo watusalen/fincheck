@@ -1,0 +1,93 @@
+/* Dashboard Components */
+
+/* Financial Cards */
+.financial-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.financial-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    border-left: 4px solid;
+}
+
+.balance-card {
+    border-left-color: #10b981;
+}
+
+.expenses-card {
+    border-left-color: #ef4444;
+}
+
+.income-card {
+    border-left-color: #3b82f6;
+}
+
+.card-header h3 {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #6b7280;
+    margin-bottom: 0.5rem;
+}
+
+.card-value {
+    font-size: 1.875rem;
+    font-weight: 700;
+    color: #1f2937;
+}
+
+/* Chart Section */
+.chart-section {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.chart-header h3 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #1f2937;
+    margin-bottom: 1rem;
+}
+
+.chart-container {
+    height: 300px;
+    position: relative;
+}
+
+/* Quick Actions */
+.quick-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-top: 2rem;
+}
+
+.action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 1rem;
+    border-radius: 8px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    width: auto;
+    margin: 0;
+}
+
+.action-btn.primary {
+    background: #3b82f6;
+    color: white;
+}
+
+.action-btn.primary:hover {
+    background: #2563eb;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
+}
