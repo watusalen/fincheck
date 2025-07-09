@@ -1,0 +1,87 @@
+/* History Page Styles */
+.history-layout {
+    display: flex;
+    min-height: calc(100vh - 4rem);
+    gap: 2rem;
+}
+
+.history-sidebar {
+    width: 280px;
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    height: fit-content;
+}
+
+.history-header {
+    margin-bottom: 1.5rem;
+}
+
+.history-header h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.months-section h4 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 1rem;
+}
+
+.months-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.month-item {
+    margin-bottom: 0.5rem;
+}
+
+.month-link {
+    display: block;
+    padding: 0.75rem 1rem;
+    color: #374151;
+    text-decoration: none;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    font-weight: 500;
+}
+
+.month-link:hover {
+    background: #f3f4f6;
+    color: #1f2937;
+}
+
+.month-item.active .month-link {
+    background: #3b82f6;
+    color: white;
+}
+
+.history-content {
+    flex: 1;
+}
+
+.history-main {
+    background: white;
+    border-radius: 12px;
+    padding: 2rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.chart-title h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #1f2937;
+    margin-bottom: 2rem;
+}
+
+.history-chart-container {
+    height: 400px;
+    position: relative;
+}
