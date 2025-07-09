@@ -4,11 +4,176 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>FinCheck</title>
+    <title>FinCheck MVP</title>
+    <link rel="stylesheet" href="css/main.css">
 </head>
 
 <body>
-    <h1>FinCheck</h1>
+    <!-- Login View -->
+    <div id="login-view" class="view-container" style="display: none;">
+        <div class="login-container">
+            <h1>FinCheck MVP</h1>
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="login-email">Email:</label>
+                    <input type="email" id="login-email" required>
+                </div>
+                <div class="form-group">
+                    <label for="login-password">Senha:</label>
+                    <input type="password" id="login-password" required>
+                </div>
+                <button type="submit">Entrar</button>
+                <button type="button" id="show-register">Criar conta</button>
+                <div id="login-error" class="error-message"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Register View -->
+    <div id="register-view" class="view-container" style="display: none;">
+        <div class="register-container">
+            <h1>Criar Conta</h1>
+            <form id="register-form">
+                <div class="form-group">
+                    <label for="register-name">Nome:</label>
+                    <input type="text" id="register-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="register-email">Email:</label>
+                    <input type="email" id="register-email" required>
+                </div>
+                <div class="form-group">
+                    <label for="register-password">Senha:</label>
+                    <input type="password" id="register-password" required>
+                </div>
+                <button type="submit">Criar conta</button>
+                <button type="button" id="show-login">Já tenho conta</button>
+                <div id="register-error" class="error-message"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Dashboard View -->
+    <div id="dashboard-view" class="main-layout" style="display: none;">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>FinCheck MVP</h2>
+            </div>
+            <nav class="sidebar-nav">
+                <ul>
+                    <li class="nav-item active">
+                        <a href="#" id="nav-home" class="nav-link">
+                            <span class="nav-icon">🏠</span>
+                            <span class="nav-text">Início</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#" id="nav-history" class="nav-link">
+                            <span class="nav-icon">📊</span>
+                            <span class="nav-text">Histórico</span>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <span id="user-name-display"></span>
+                    <button id="logout-btn" class="logout-btn">Sair</button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Dashboard Home -->
+            <div id="dashboard-home" class="dashboard-section active">
+                <div class="dashboard-grid">
+                    <!-- Financial Cards -->
+                    <div class="financial-cards">
+                        <div class="financial-card balance-card">
+                            <div class="card-header">
+                                <h3>Saldo Atual</h3>
+                            </div>
+                            <div class="card-value">
+                                <span id="current-balance">R$ 0,00</span>
+                            </div>
+                        </div>
+
+                        <div class="financial-card expenses-card">
+                            <div class="card-header">
+                                <h3>Despesas</h3>
+                            </div>
+                            <div class="card-value">
+                                <span id="total-expenses">R$ 0,00</span>
+                            </div>
+                        </div>
+
+                        <div class="financial-card income-card">
+                            <div class="card-header">
+                                <h3>Entradas</h3>
+                            </div>
+                            <div class="card-value">
+                                <span id="total-income">R$ 0,00</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Chart Section -->
+                    <div class="chart-section">
+                        <div class="chart-header">
+                            <h3>Resumo Financeiro</h3>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="main-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="quick-actions">
+                    <button id="add-transaction-btn" class="action-btn primary">
+                        <span>💰</span>
+                        Nova Transação
+                    </button>
+                </div>
+            </div>
+
+            <!-- History Section -->
+            <div id="dashboard-history" class="dashboard-section">
+                <div class="history-layout">
+                    <!-- History Sidebar -->
+                    <div class="history-sidebar">
+                        <div class="history-header">
+                            <h3>Histórico</h3>
+                        </div>
+                        <div class="months-section">
+                            <h4>MESES ANTERIORES</h4>
+                            <ul id="months-list" class="months-list">
+                                <!-- Meses serão inseridos dinamicamente -->
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- History Content -->
+                    <div class="history-content">
+                        <div class="history-main">
+                            <div class="chart-title">
+                                <h3 id="history-chart-title">Histórico financeiro do mês atual</h3>
+                            </div>
+                            <div class="history-chart-container">
+                                <canvas id="history-chart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal containers will be inserted here by JavaScript -->
+    <div id="modal-container"></div>
+
     <script type="module" src="../src/main.ts"></script>
 </body>
 
