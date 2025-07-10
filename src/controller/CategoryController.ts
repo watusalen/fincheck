@@ -3,6 +3,7 @@ import { TransactionService } from '../service/TransactionService';
 import { Category } from '../model/Category';
 import { isNotEmpty } from '../utils/validators';
 
+// Interfaces para dados de entrada
 export interface CreateCategoryData {
   nome: string;
   cor: string;
@@ -14,7 +15,58 @@ export interface UpdateCategoryData extends Partial<CreateCategoryData> {
   id: string;
 }
 
+// Interfaces para responses consistentes
+export interface CategoryResponse {
+  success: boolean;
+  message: string;
+  category?: Category;
+  categoryId?: string;
+}
+
+export interface CategoriesResponse {
+  success: boolean;
+  message: string;
+  categories?: Category[];
+}
+
+export interface CategoryStatsResponse {
+  success: boolean;
+  message: string;
+  stats?: CategoryStats;
+}
+
+export interface BaseResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface ValidationResult {
+  isValid: boolean;
+  message?: string;
+}
+
+// Interface para estatísticas da categoria
+export interface CategoryStats {
+  transactionCount: number;
+  totalAmount: number;
+  lastTransaction?: string;
+}
+
+// Enum para níveis de log
+enum LogLevel {
+  INFO = 'info',
+  WARN = 'warn',
+  ERROR = 'error'
+}
+
 export class CategoryController {
+  // Constantes de configuração
+  private static readonly MIN_NAME_LENGTH = 2;
+  private static readonly MAX_NAME_LENGTH = 30;
+  private static readonly MIN_DESCRIPTION_LENGTH = 3;
+  private static readonly MAX_DESCRIPTION_LENGTH = 100;
+  private static readonly MAX_SPENDING_LIMIT = 1000000;
+  
   private static instance: CategoryController;
   private categoryService: CategoryService;
   private transactionService: TransactionService;
@@ -31,13 +83,149 @@ export class CategoryController {
     return CategoryController.instance;
   }
 
-  // Criar nova categoria
-  async createCategory(userId: string, data: CreateCategoryData): Promise<{ success: boolean; message: string; categoryId?: string }> {
+  /**
+   * Sistema de logging estruturado
+   * @param level - Nível do log
+   * @param message - Mensagem do log
+   * @param data - Dados adicionais (opcional)
+   */
+  private log(level: LogLevel, message: string, data?: any): void {
+    const logMessage = `[CategoryController] ${message}`;
+    
+    switch (level) {
+      case LogLevel.INFO:
+        console.log(`✅ ${logMessage}`, data || '');
+        break;
+      case LogLevel.WARN:
+        console.warn(`⚠️ ${logMessage}`, data || '');
+        break;
+      case LogLevel.ERROR:
+        console.error(`❌ ${logMessage}`, data || '');
+        break;
+    }
+  }
+
+  /**
+   * Valida os dados de criação de categoria
+   * @param data - Dados da categoria
+   * @param isUpdate - Se é uma operação de atualização
+   * @returns Resultado da validação
+   */
+  private validateCategoryData(data: CreateCategoryData, isUpdate: boolean = false): ValidationResult {
+    // Validação de nome
+    if (!isUpdate || data.nome !== undefined) {
+      if (!isNotEmpty(data.nome)) {
+        return { isValid: false, message: 'Nome da categoria é obrigatório' };
+      }
+      if (data.nome.length < CategoryController.MIN_NAME_LENGTH) {
+        return { 
+          isValid: false, 
+          message: `Nome deve ter pelo menos ${CategoryController.MIN_NAME_LENGTH} caracteres` 
+        };
+      }
+      if (data.nome.length > CategoryController.MAX_NAME_LENGTH) {
+        return { 
+          isValid: false, 
+          message: `Nome deve ter no máximo ${CategoryController.MAX_NAME_LENGTH} caracteres` 
+        };
+      }
+    }
+
+    // Validação de cor
+    if (!isUpdate || data.cor !== undefined) {
+      if (!isNotEmpty(data.cor)) {
+        return { isValid: false, message: 'Cor da categoria é obrigatória' };
+      }
+      
+      const hexColorRegex = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
+      if (!hexColorRegex.test(data.cor)) {
+        return { isValid: false, message: 'Cor deve estar no formato hexadecimal (#RRGGBB)' };
+      }
+    }
+
+    // Validação de descrição
+    if (!isUpdate || data.descricao !== undefined) {
+      if (!isNotEmpty(data.descricao)) {
+        return { isValid: false, message: 'Descrição da categoria é obrigatória' };
+      }
+      if (data.descricao.length < CategoryController.MIN_DESCRIPTION_LENGTH) {
+        return { 
+          isValid: false, 
+          message: `Descrição deve ter pelo menos ${CategoryController.MIN_DESCRIPTION_LENGTH} caracteres` 
+        };
+      }
+      if (data.descricao.length > CategoryController.MAX_DESCRIPTION_LENGTH) {
+        return { 
+          isValid: false, 
+          message: `Descrição deve ter no máximo ${CategoryController.MAX_DESCRIPTION_LENGTH} caracteres` 
+        };
+      }
+    }
+
+    // Validação de limite de gasto
+    if (!isUpdate || data.limiteGasto !== undefined) {
+      if (data.limiteGasto !== undefined && data.limiteGasto < 0) {
+        return { isValid: false, message: 'Limite de gasto não pode ser negativo' };
+      }
+      if (data.limiteGasto !== undefined && data.limiteGasto > CategoryController.MAX_SPENDING_LIMIT) {
+        return { 
+          isValid: false, 
+          message: `Limite de gasto deve ser menor que R$ ${CategoryController.MAX_SPENDING_LIMIT.toLocaleString('pt-BR')},00` 
+        };
+      }
+    }
+
+    return { isValid: true };
+  }
+
+  /**
+   * Verificar se nome da categoria já existe para o usuário
+   * @param userId - ID do usuário
+   * @param nome - Nome da categoria
+   * @param excludeId - ID da categoria a ser excluída da verificação (para updates)
+   * @returns True se nome já existir
+   */
+  private async checkCategoryNameExists(userId: string, nome: string, excludeId?: string): Promise<boolean> {
     try {
-      // Validações
+      const categories = await this.categoryService.getCategoriesByUser(userId);
+      return categories.some(cat =>
+        cat.nome.toLowerCase() === nome.toLowerCase() &&
+        cat.id !== excludeId
+      );
+    } catch (error) {
+      this.log(LogLevel.ERROR, 'Erro ao verificar nome da categoria', { userId, nome, error });
+      return false;
+    }
+  }
+
+  /**
+   * Verificar se categoria tem transações associadas
+   * @param userId - ID do usuário
+   * @param categoryId - ID da categoria
+   * @returns True se categoria tiver transações
+   */
+  private async checkCategoryHasTransactions(userId: string, categoryId: string): Promise<boolean> {
+    try {
+      const transactions = await this.transactionService.getTransactionsByUser(userId);
+      return transactions.some(t => t.categoriaId === categoryId);
+    } catch (error) {
+      this.log(LogLevel.ERROR, 'Erro ao verificar transações da categoria', { userId, categoryId, error });
+      return false;
+    }
+  }
+
+  /**
+   * Cria uma nova categoria
+   * @param userId - ID do usuário
+   * @param data - Dados da categoria
+   * @returns Promise com resultado da criação
+   */
+  async createCategory(userId: string, data: CreateCategoryData): Promise<CategoryResponse> {
+    try {
+      // Validações de entrada
       const validation = this.validateCategoryData(data);
       if (!validation.isValid) {
-        return { success: false, message: validation.message };
+        return { success: false, message: validation.message! };
       }
 
       // Verificar se categoria já existe
@@ -52,6 +240,12 @@ export class CategoryController {
         ...data
       });
 
+      this.log(LogLevel.INFO, 'Categoria criada com sucesso', { 
+        userId, 
+        categoryId, 
+        nome: data.nome 
+      });
+
       return {
         success: true,
         message: 'Categoria criada com sucesso!',
@@ -59,7 +253,8 @@ export class CategoryController {
       };
 
     } catch (error: any) {
-      console.error('❌ Erro ao criar categoria:', error.message);
+      this.log(LogLevel.ERROR, 'Erro ao criar categoria', { userId, error: error.message });
+
       return {
         success: false,
         message: 'Erro ao criar categoria. Tente novamente.'
@@ -67,10 +262,19 @@ export class CategoryController {
     }
   }
 
-  // Buscar categorias do usuário
-  async getUserCategories(userId: string): Promise<{ success: boolean; message: string; categories?: Category[] }> {
+  /**
+   * Busca categorias do usuário
+   * @param userId - ID do usuário
+   * @returns Promise com lista de categorias
+   */
+  async getUserCategories(userId: string): Promise<CategoriesResponse> {
     try {
       const categories = await this.categoryService.getCategoriesByUser(userId);
+
+      this.log(LogLevel.INFO, 'Categorias carregadas com sucesso', { 
+        userId, 
+        count: categories.length 
+      });
 
       return {
         success: true,
@@ -79,7 +283,8 @@ export class CategoryController {
       };
 
     } catch (error: any) {
-      console.error('❌ Erro ao carregar categorias:', error.message);
+      this.log(LogLevel.ERROR, 'Erro ao carregar categorias', { userId, error: error.message });
+
       return {
         success: false,
         message: 'Erro ao carregar categorias'
@@ -87,10 +292,15 @@ export class CategoryController {
     }
   }
 
-  // Atualizar categoria
-  async updateCategory(userId: string, data: UpdateCategoryData): Promise<{ success: boolean; message: string }> {
+  /**
+   * Atualiza uma categoria existente
+   * @param userId - ID do usuário
+   * @param data - Dados da categoria para atualizar
+   * @returns Promise com resultado da atualização
+   */
+  async updateCategory(userId: string, data: UpdateCategoryData): Promise<BaseResponse> {
     try {
-      // Validações básicas
+      // Validação básica
       if (!data.id) {
         return { success: false, message: 'ID da categoria é obrigatório' };
       }
@@ -99,7 +309,7 @@ export class CategoryController {
       if (data.nome !== undefined || data.cor !== undefined || data.descricao !== undefined) {
         const validation = this.validateCategoryData(data as CreateCategoryData, true);
         if (!validation.isValid) {
-          return { success: false, message: validation.message };
+          return { success: false, message: validation.message! };
         }
       }
 
@@ -114,13 +324,23 @@ export class CategoryController {
       // Atualizar categoria
       await this.categoryService.updateCategory(userId, data.id, data);
 
+      this.log(LogLevel.INFO, 'Categoria atualizada com sucesso', { 
+        userId, 
+        categoryId: data.id 
+      });
+
       return {
         success: true,
         message: 'Categoria atualizada com sucesso!'
       };
 
     } catch (error: any) {
-      console.error('❌ Erro ao atualizar categoria:', error.message);
+      this.log(LogLevel.ERROR, 'Erro ao atualizar categoria', { 
+        userId, 
+        categoryId: data.id, 
+        error: error.message 
+      });
+
       return {
         success: false,
         message: 'Erro ao atualizar categoria. Tente novamente.'
@@ -128,8 +348,13 @@ export class CategoryController {
     }
   }
 
-  // Deletar categoria
-  async deleteCategory(userId: string, categoryId: string): Promise<{ success: boolean; message: string }> {
+  /**
+   * Remove uma categoria
+   * @param userId - ID do usuário
+   * @param categoryId - ID da categoria
+   * @returns Promise com resultado da remoção
+   */
+  async deleteCategory(userId: string, categoryId: string): Promise<BaseResponse> {
     try {
       if (!categoryId) {
         return { success: false, message: 'ID da categoria é obrigatório' };
@@ -146,13 +371,23 @@ export class CategoryController {
 
       await this.categoryService.deleteCategory(userId, categoryId);
 
+      this.log(LogLevel.INFO, 'Categoria deletada com sucesso', { 
+        userId, 
+        categoryId 
+      });
+
       return {
         success: true,
         message: 'Categoria deletada com sucesso!'
       };
 
     } catch (error: any) {
-      console.error('❌ Erro ao deletar categoria:', error.message);
+      this.log(LogLevel.ERROR, 'Erro ao deletar categoria', { 
+        userId, 
+        categoryId, 
+        error: error.message 
+      });
+
       return {
         success: false,
         message: 'Erro ao deletar categoria. Tente novamente.'
@@ -160,8 +395,13 @@ export class CategoryController {
     }
   }
 
-  // Obter categoria por ID
-  async getCategoryById(userId: string, categoryId: string): Promise<{ success: boolean; message: string; category?: Category }> {
+  /**
+   * Busca uma categoria por ID
+   * @param userId - ID do usuário
+   * @param categoryId - ID da categoria
+   * @returns Promise com categoria encontrada
+   */
+  async getCategoryById(userId: string, categoryId: string): Promise<CategoryResponse> {
     try {
       if (!categoryId) {
         return { success: false, message: 'ID da categoria é obrigatório' };
@@ -174,6 +414,12 @@ export class CategoryController {
         return { success: false, message: 'Categoria não encontrada' };
       }
 
+      this.log(LogLevel.INFO, 'Categoria encontrada', { 
+        userId, 
+        categoryId,
+        nome: category.nome 
+      });
+
       return {
         success: true,
         message: 'Categoria encontrada!',
@@ -181,7 +427,12 @@ export class CategoryController {
       };
 
     } catch (error: any) {
-      console.error('❌ Erro ao buscar categoria:', error.message);
+      this.log(LogLevel.ERROR, 'Erro ao buscar categoria', { 
+        userId, 
+        categoryId, 
+        error: error.message 
+      });
+
       return {
         success: false,
         message: 'Erro ao buscar categoria'
@@ -189,17 +440,18 @@ export class CategoryController {
     }
   }
 
-  // Obter estatísticas da categoria
-  async getCategoryStats(userId: string, categoryId: string): Promise<{
-    success: boolean;
-    message: string;
-    stats?: {
-      transactionCount: number;
-      totalAmount: number;
-      lastTransaction?: string;
-    }
-  }> {
+  /**
+   * Calcula estatísticas de uma categoria
+   * @param userId - ID do usuário
+   * @param categoryId - ID da categoria
+   * @returns Promise com estatísticas da categoria
+   */
+  async getCategoryStats(userId: string, categoryId: string): Promise<CategoryStatsResponse> {
     try {
+      if (!categoryId) {
+        return { success: false, message: 'ID da categoria é obrigatório' };
+      }
+
       const transactions = await this.transactionService.getTransactionsByUser(userId);
       const categoryTransactions = transactions.filter(t => t.categoriaId === categoryId);
 
@@ -211,18 +463,32 @@ export class CategoryController {
         ? categoryTransactions.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())[0].data
         : undefined;
 
+      const stats: CategoryStats = {
+        transactionCount: categoryTransactions.length,
+        totalAmount,
+        lastTransaction
+      };
+
+      this.log(LogLevel.INFO, 'Estatísticas da categoria calculadas', { 
+        userId, 
+        categoryId,
+        transactionCount: stats.transactionCount,
+        totalAmount: stats.totalAmount
+      });
+
       return {
         success: true,
         message: 'Estatísticas calculadas!',
-        stats: {
-          transactionCount: categoryTransactions.length,
-          totalAmount,
-          lastTransaction
-        }
+        stats
       };
 
     } catch (error: any) {
-      console.error('❌ Erro ao calcular estatísticas:', error.message);
+      this.log(LogLevel.ERROR, 'Erro ao calcular estatísticas', { 
+        userId, 
+        categoryId, 
+        error: error.message 
+      });
+
       return {
         success: false,
         message: 'Erro ao calcular estatísticas da categoria'
@@ -230,81 +496,20 @@ export class CategoryController {
     }
   }
 
-  // Validar dados da categoria
-  private validateCategoryData(data: CreateCategoryData, isUpdate: boolean = false): { isValid: boolean; message: string } {
-    if (!isUpdate || data.nome !== undefined) {
-      if (!isNotEmpty(data.nome)) {
-        return { isValid: false, message: 'Nome da categoria é obrigatório' };
-      }
-      if (data.nome.length < 2) {
-        return { isValid: false, message: 'Nome deve ter pelo menos 2 caracteres' };
-      }
-      if (data.nome.length > 30) {
-        return { isValid: false, message: 'Nome deve ter no máximo 30 caracteres' };
-      }
-    }
-
-    if (!isUpdate || data.cor !== undefined) {
-      if (!isNotEmpty(data.cor)) {
-        return { isValid: false, message: 'Cor da categoria é obrigatória' };
-      }
-      // Validar formato de cor hex
-      const hexColorRegex = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
-      if (!hexColorRegex.test(data.cor)) {
-        return { isValid: false, message: 'Cor deve estar no formato hexadecimal (#RRGGBB)' };
-      }
-    }
-
-    if (!isUpdate || data.descricao !== undefined) {
-      if (!isNotEmpty(data.descricao)) {
-        return { isValid: false, message: 'Descrição da categoria é obrigatória' };
-      }
-      if (data.descricao.length < 3) {
-        return { isValid: false, message: 'Descrição deve ter pelo menos 3 caracteres' };
-      }
-      if (data.descricao.length > 100) {
-        return { isValid: false, message: 'Descrição deve ter no máximo 100 caracteres' };
-      }
-    }
-
-    if (!isUpdate || data.limiteGasto !== undefined) {
-      if (data.limiteGasto !== undefined && data.limiteGasto < 0) {
-        return { isValid: false, message: 'Limite de gasto não pode ser negativo' };
-      }
-      if (data.limiteGasto !== undefined && data.limiteGasto > 1000000) {
-        return { isValid: false, message: 'Limite de gasto deve ser menor que R$ 1.000.000,00' };
-      }
-    }
-
-    return { isValid: true, message: 'Dados válidos' };
-  }
-
-  // Verificar se nome da categoria já existe
-  private async checkCategoryNameExists(userId: string, nome: string, excludeId?: string): Promise<boolean> {
+  /**
+   * Cria categorias padrão para novos usuários
+   * @param userId - ID do usuário
+   * @returns Promise com resultado da criação das categorias padrão
+   */
+  async createDefaultCategories(userId: string): Promise<BaseResponse> {
     try {
-      const categories = await this.categoryService.getCategoriesByUser(userId);
-      return categories.some(cat =>
-        cat.nome.toLowerCase() === nome.toLowerCase() &&
-        cat.id !== excludeId
-      );
-    } catch (error) {
-      return false;
-    }
-  }
+      // Verificar se já existem categorias
+      const existingCategories = await this.categoryService.getCategoriesByUser(userId);
+      if (existingCategories.length > 0) {
+        this.log(LogLevel.INFO, 'Usuário já possui categorias', { userId, count: existingCategories.length });
+        return { success: true, message: 'Usuário já possui categorias' };
+      }
 
-  // Verificar se categoria tem transações
-  private async checkCategoryHasTransactions(userId: string, categoryId: string): Promise<boolean> {
-    try {
-      const transactions = await this.transactionService.getTransactionsByUser(userId);
-      return transactions.some(t => t.categoriaId === categoryId);
-    } catch (error) {
-      return false;
-    }
-  }
-
-  // Criar categorias padrão para novos usuários
-  async createDefaultCategories(userId: string): Promise<{ success: boolean; message: string }> {
-    try {
       const defaultCategories = [
         // Receitas
         { nome: 'Salário', cor: '#22c55e', descricao: 'Salário e rendimentos do trabalho' },
@@ -325,12 +530,6 @@ export class CategoryController {
         { nome: 'Outros Gastos', cor: '#64748b', descricao: 'Despesas diversas' }
       ];
 
-      // Verificar se já existem categorias
-      const existingCategories = await this.categoryService.getCategoriesByUser(userId);
-      if (existingCategories.length > 0) {
-        return { success: true, message: 'Usuário já possui categorias' };
-      }
-
       // Criar categorias padrão
       let createdCount = 0;
       for (const category of defaultCategories) {
@@ -341,9 +540,15 @@ export class CategoryController {
           });
           createdCount++;
         } catch (error) {
-          console.error(`❌ Erro ao criar categoria ${category.nome}:`, error);
+          this.log(LogLevel.WARN, `Erro ao criar categoria padrão: ${category.nome}`, error);
         }
       }
+
+      this.log(LogLevel.INFO, 'Categorias padrão criadas', { 
+        userId, 
+        createdCount, 
+        totalAttempts: defaultCategories.length 
+      });
 
       if (createdCount > 0) {
         return {
@@ -358,7 +563,8 @@ export class CategoryController {
       }
 
     } catch (error: any) {
-      console.error('❌ Erro ao criar categorias padrão:', error.message);
+      this.log(LogLevel.ERROR, 'Erro ao criar categorias padrão', { userId, error: error.message });
+
       return {
         success: false,
         message: 'Erro ao criar categorias padrão. Tente novamente.'
