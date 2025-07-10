@@ -4,6 +4,7 @@ import { Transaction } from '../model/Transaction';
 import { Category } from '../model/Category';
 import { isNotEmpty, isValidDate } from '../utils/validators';
 
+// Interfaces para dados de entrada
 export interface CreateTransactionData {
   descricao: string;
   valor: number;
@@ -19,6 +20,37 @@ export interface UpdateTransactionData extends Partial<CreateTransactionData> {
   id: string;
 }
 
+// Interfaces para responses consistentes
+export interface TransactionResponse {
+  success: boolean;
+  message: string;
+  transaction?: Transaction;
+  transactionId?: string;
+}
+
+export interface TransactionsResponse {
+  success: boolean;
+  message: string;
+  transactions?: Transaction[];
+}
+
+export interface TransactionSummaryResponse {
+  success: boolean;
+  message: string;
+  summary?: TransactionSummary;
+}
+
+export interface BaseResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface ValidationResult {
+  isValid: boolean;
+  message?: string;
+}
+
+// Interface para resumo financeiro
 export interface TransactionSummary {
   saldo: number;
   totalReceitas: number;
@@ -26,7 +58,20 @@ export interface TransactionSummary {
   transacoesCount: number;
 }
 
+// Enum para níveis de log
+enum LogLevel {
+  INFO = 'info',
+  WARN = 'warn',
+  ERROR = 'error'
+}
+
 export class TransactionController {
+  // Constantes de configuração
+  private static readonly MIN_DESCRIPTION_LENGTH = 3;
+  private static readonly MAX_DESCRIPTION_LENGTH = 100;
+  private static readonly MAX_VALUE = 1000000;
+  private static readonly MAX_YEARS_AGO = 10;
+  
   private static instance: TransactionController;
   private transactionService: TransactionService;
   private categoryService: CategoryService;
@@ -43,13 +88,137 @@ export class TransactionController {
     return TransactionController.instance;
   }
 
-  // Criar nova transação
-  async createTransaction(userId: string, data: CreateTransactionData): Promise<{ success: boolean; message: string; transactionId?: string }> {
+  /**
+   * Sistema de logging estruturado
+   * @param level - Nível do log
+   * @param message - Mensagem do log
+   * @param data - Dados adicionais (opcional)
+   */
+  private log(level: LogLevel, message: string, data?: any): void {
+    const logMessage = `[TransactionController] ${message}`;
+    
+    switch (level) {
+      case LogLevel.INFO:
+        console.log(`✅ ${logMessage}`, data || '');
+        break;
+      case LogLevel.WARN:
+        console.warn(`⚠️ ${logMessage}`, data || '');
+        break;
+      case LogLevel.ERROR:
+        console.error(`❌ ${logMessage}`, data || '');
+        break;
+    }
+  }
+
+  /**
+   * Valida os dados de criação de transação
+   * @param data - Dados da transação
+   * @param isUpdate - Se é uma operação de atualização
+   * @returns Resultado da validação
+   */
+  private validateTransactionData(data: CreateTransactionData, isUpdate: boolean = false): ValidationResult {
+    // Validação de descrição
+    if (!isUpdate || data.descricao !== undefined) {
+      if (!isNotEmpty(data.descricao)) {
+        return { isValid: false, message: 'Descrição é obrigatória' };
+      }
+      if (data.descricao.length < TransactionController.MIN_DESCRIPTION_LENGTH) {
+        return { 
+          isValid: false, 
+          message: `Descrição deve ter pelo menos ${TransactionController.MIN_DESCRIPTION_LENGTH} caracteres` 
+        };
+      }
+      if (data.descricao.length > TransactionController.MAX_DESCRIPTION_LENGTH) {
+        return { 
+          isValid: false, 
+          message: `Descrição deve ter no máximo ${TransactionController.MAX_DESCRIPTION_LENGTH} caracteres` 
+        };
+      }
+    }
+
+    // Validação de valor
+    if (!isUpdate || data.valor !== undefined) {
+      if (!data.valor || data.valor <= 0) {
+        return { isValid: false, message: 'Valor deve ser maior que zero' };
+      }
+      if (data.valor > TransactionController.MAX_VALUE) {
+        return { 
+          isValid: false, 
+          message: `Valor deve ser menor que R$ ${TransactionController.MAX_VALUE.toLocaleString('pt-BR')},00` 
+        };
+      }
+    }
+
+    // Validação de tipo
+    if (!isUpdate || data.tipo !== undefined) {
+      if (!data.tipo || !['receita', 'despesa'].includes(data.tipo)) {
+        return { isValid: false, message: 'Tipo deve ser "receita" ou "despesa"' };
+      }
+    }
+
+    // Validação de categoria
+    if (!isUpdate || data.categoriaId !== undefined) {
+      if (!isNotEmpty(data.categoriaId)) {
+        return { isValid: false, message: 'Categoria é obrigatória' };
+      }
+    }
+
+    // Validação de data
+    if (!isUpdate || data.data !== undefined) {
+      if (!isValidDate(data.data)) {
+        return { isValid: false, message: 'Data inválida' };
+      }
+
+      const transactionDate = new Date(data.data);
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
+
+      if (transactionDate > today) {
+        return { isValid: false, message: 'Data não pode ser futura' };
+      }
+
+      const yearsAgo = new Date();
+      yearsAgo.setFullYear(yearsAgo.getFullYear() - TransactionController.MAX_YEARS_AGO);
+
+      if (transactionDate < yearsAgo) {
+        return { 
+          isValid: false, 
+          message: `Data não pode ser anterior a ${TransactionController.MAX_YEARS_AGO} anos` 
+        };
+      }
+    }
+
+    return { isValid: true };
+  }
+
+  /**
+   * Verificar se categoria existe para o usuário
+   * @param userId - ID do usuário
+   * @param categoryId - ID da categoria
+   * @returns True se categoria existir
+   */
+  private async validateCategoryExists(userId: string, categoryId: string): Promise<boolean> {
     try {
-      // Validações
+      const categories = await this.categoryService.getCategoriesByUser(userId);
+      return categories.some(cat => cat.id === categoryId);
+    } catch (error) {
+      this.log(LogLevel.ERROR, 'Erro ao validar categoria', { userId, categoryId, error });
+      return false;
+    }
+  }
+
+  /**
+   * Cria uma nova transação
+   * @param userId - ID do usuário
+   * @param data - Dados da transação
+   * @returns Promise com resultado da criação
+   */
+  async createTransaction(userId: string, data: CreateTransactionData): Promise<TransactionResponse> {
+    try {
+      // Validações de entrada
       const validation = this.validateTransactionData(data);
       if (!validation.isValid) {
-        return { success: false, message: validation.message };
+        return { success: false, message: validation.message! };
       }
 
       // Verificar se categoria existe
@@ -65,6 +234,13 @@ export class TransactionController {
         recorrente: data.recorrente || false
       });
 
+      this.log(LogLevel.INFO, 'Transação criada com sucesso', { 
+        userId, 
+        transactionId, 
+        tipo: data.tipo,
+        valor: data.valor 
+      });
+
       return {
         success: true,
         message: 'Transação criada com sucesso!',
@@ -72,7 +248,8 @@ export class TransactionController {
       };
 
     } catch (error: any) {
-      console.error('❌ Erro ao criar transação:', error.message);
+      this.log(LogLevel.ERROR, 'Erro ao criar transação', { userId, error: error.message });
+
       return {
         success: false,
         message: 'Erro ao criar transação. Tente novamente.'
@@ -80,10 +257,19 @@ export class TransactionController {
     }
   }
 
-  // Buscar transações do usuário
-  async getUserTransactions(userId: string): Promise<{ success: boolean; message: string; transactions?: Transaction[] }> {
+  /**
+   * Busca transações do usuário
+   * @param userId - ID do usuário
+   * @returns Promise com lista de transações
+   */
+  async getUserTransactions(userId: string): Promise<TransactionsResponse> {
     try {
       const transactions = await this.transactionService.getTransactionsByUser(userId);
+
+      this.log(LogLevel.INFO, 'Transações carregadas com sucesso', { 
+        userId, 
+        count: transactions.length 
+      });
 
       return {
         success: true,
@@ -92,7 +278,8 @@ export class TransactionController {
       };
 
     } catch (error: any) {
-      console.error('❌ Erro ao carregar transações:', error.message);
+      this.log(LogLevel.ERROR, 'Erro ao carregar transações', { userId, error: error.message });
+
       return {
         success: false,
         message: 'Erro ao carregar transações'
@@ -100,19 +287,25 @@ export class TransactionController {
     }
   }
 
-  // Atualizar transação
-  async updateTransaction(userId: string, data: UpdateTransactionData): Promise<{ success: boolean; message: string }> {
+  /**
+   * Atualiza uma transação existente
+   * @param userId - ID do usuário
+   * @param data - Dados da transação para atualizar
+   * @returns Promise com resultado da atualização
+   */
+  async updateTransaction(userId: string, data: UpdateTransactionData): Promise<BaseResponse> {
     try {
-      // Validações básicas
+      // Validação básica
       if (!data.id) {
         return { success: false, message: 'ID da transação é obrigatório' };
       }
 
       // Validar dados se fornecidos
-      if (data.descricao !== undefined || data.valor !== undefined || data.tipo !== undefined || data.categoriaId !== undefined || data.data !== undefined) {
+      if (data.descricao !== undefined || data.valor !== undefined || data.tipo !== undefined || 
+          data.categoriaId !== undefined || data.data !== undefined) {
         const validation = this.validateTransactionData(data as CreateTransactionData, true);
         if (!validation.isValid) {
-          return { success: false, message: validation.message };
+          return { success: false, message: validation.message! };
         }
       }
 
@@ -127,13 +320,23 @@ export class TransactionController {
       // Atualizar transação
       await this.transactionService.updateTransaction(userId, data.id, data);
 
+      this.log(LogLevel.INFO, 'Transação atualizada com sucesso', { 
+        userId, 
+        transactionId: data.id 
+      });
+
       return {
         success: true,
         message: 'Transação atualizada com sucesso!'
       };
 
     } catch (error: any) {
-      console.error('❌ Erro ao atualizar transação:', error.message);
+      this.log(LogLevel.ERROR, 'Erro ao atualizar transação', { 
+        userId, 
+        transactionId: data.id, 
+        error: error.message 
+      });
+
       return {
         success: false,
         message: 'Erro ao atualizar transação. Tente novamente.'
@@ -141,8 +344,13 @@ export class TransactionController {
     }
   }
 
-  // Deletar transação
-  async deleteTransaction(userId: string, transactionId: string): Promise<{ success: boolean; message: string }> {
+  /**
+   * Remove uma transação
+   * @param userId - ID do usuário
+   * @param transactionId - ID da transação
+   * @returns Promise com resultado da remoção
+   */
+  async deleteTransaction(userId: string, transactionId: string): Promise<BaseResponse> {
     try {
       if (!transactionId) {
         return { success: false, message: 'ID da transação é obrigatório' };
@@ -150,13 +358,23 @@ export class TransactionController {
 
       await this.transactionService.deleteTransaction(userId, transactionId);
 
+      this.log(LogLevel.INFO, 'Transação deletada com sucesso', { 
+        userId, 
+        transactionId 
+      });
+
       return {
         success: true,
         message: 'Transação deletada com sucesso!'
       };
 
     } catch (error: any) {
-      console.error('❌ Erro ao deletar transação:', error.message);
+      this.log(LogLevel.ERROR, 'Erro ao deletar transação', { 
+        userId, 
+        transactionId, 
+        error: error.message 
+      });
+
       return {
         success: false,
         message: 'Erro ao deletar transação. Tente novamente.'
@@ -164,8 +382,12 @@ export class TransactionController {
     }
   }
 
-  // Calcular resumo financeiro
-  async getFinancialSummary(userId: string): Promise<{ success: boolean; message: string; summary?: TransactionSummary }> {
+  /**
+   * Calcula resumo financeiro do usuário
+   * @param userId - ID do usuário
+   * @returns Promise com resumo financeiro
+   */
+  async getFinancialSummary(userId: string): Promise<TransactionSummaryResponse> {
     try {
       const balanceData = await this.transactionService.calculateBalance(userId);
 
@@ -176,6 +398,11 @@ export class TransactionController {
         transacoesCount: balanceData.receitas > 0 || balanceData.despesas > 0 ? 1 : 0 // Simplified
       };
 
+      this.log(LogLevel.INFO, 'Resumo financeiro calculado', { 
+        userId, 
+        saldo: summary.saldo 
+      });
+
       return {
         success: true,
         message: 'Resumo calculado com sucesso!',
@@ -183,7 +410,11 @@ export class TransactionController {
       };
 
     } catch (error: any) {
-      console.error('❌ Erro ao calcular resumo:', error.message);
+      this.log(LogLevel.ERROR, 'Erro ao calcular resumo', { 
+        userId, 
+        error: error.message 
+      });
+
       return {
         success: false,
         message: 'Erro ao calcular resumo financeiro'
@@ -191,13 +422,18 @@ export class TransactionController {
     }
   }
 
-  // Buscar transações com filtros
+  /**
+   * Busca transações com filtros aplicados
+   * @param userId - ID do usuário
+   * @param filters - Filtros a serem aplicados
+   * @returns Promise com transações filtradas
+   */
   async getFilteredTransactions(userId: string, filters: {
     startDate?: string;
     endDate?: string;
     categoryId?: string;
     tipo?: 'receita' | 'despesa';
-  }): Promise<{ success: boolean; message: string; transactions?: Transaction[] }> {
+  }): Promise<TransactionsResponse> {
     try {
       let transactions = await this.transactionService.getTransactionsByUser(userId);
 
@@ -220,6 +456,12 @@ export class TransactionController {
         transactions = transactions.filter(t => t.tipo === filters.tipo);
       }
 
+      this.log(LogLevel.INFO, 'Transações filtradas com sucesso', { 
+        userId, 
+        filters,
+        resultCount: transactions.length 
+      });
+
       return {
         success: true,
         message: 'Transações filtradas com sucesso!',
@@ -227,81 +469,16 @@ export class TransactionController {
       };
 
     } catch (error: any) {
-      console.error('❌ Erro ao filtrar transações:', error.message);
+      this.log(LogLevel.ERROR, 'Erro ao filtrar transações', { 
+        userId, 
+        filters, 
+        error: error.message 
+      });
+
       return {
         success: false,
         message: 'Erro ao filtrar transações'
       };
-    }
-  }
-
-  // Validar dados da transação
-  private validateTransactionData(data: CreateTransactionData, isUpdate: boolean = false): { isValid: boolean; message: string } {
-    if (!isUpdate || data.descricao !== undefined) {
-      if (!isNotEmpty(data.descricao)) {
-        return { isValid: false, message: 'Descrição é obrigatória' };
-      }
-      if (data.descricao.length < 3) {
-        return { isValid: false, message: 'Descrição deve ter pelo menos 3 caracteres' };
-      }
-      if (data.descricao.length > 100) {
-        return { isValid: false, message: 'Descrição deve ter no máximo 100 caracteres' };
-      }
-    }
-
-    if (!isUpdate || data.valor !== undefined) {
-      if (!data.valor || data.valor <= 0) {
-        return { isValid: false, message: 'Valor deve ser maior que zero' };
-      }
-      if (data.valor > 1000000) {
-        return { isValid: false, message: 'Valor deve ser menor que R$ 1.000.000,00' };
-      }
-    }
-
-    if (!isUpdate || data.tipo !== undefined) {
-      if (!data.tipo || !['receita', 'despesa'].includes(data.tipo)) {
-        return { isValid: false, message: 'Tipo deve ser "receita" ou "despesa"' };
-      }
-    }
-
-    if (!isUpdate || data.categoriaId !== undefined) {
-      if (!isNotEmpty(data.categoriaId)) {
-        return { isValid: false, message: 'Categoria é obrigatória' };
-      }
-    }
-
-    if (!isUpdate || data.data !== undefined) {
-      if (!isValidDate(data.data)) {
-        return { isValid: false, message: 'Data inválida' };
-      }
-
-      const transactionDate = new Date(data.data);
-      const today = new Date();
-      today.setHours(23, 59, 59, 999); // Final do dia
-
-      if (transactionDate > today) {
-        return { isValid: false, message: 'Data não pode ser futura' };
-      }
-
-      // Verificar se não é muito antiga (ex: 10 anos)
-      const tenYearsAgo = new Date();
-      tenYearsAgo.setFullYear(tenYearsAgo.getFullYear() - 10);
-
-      if (transactionDate < tenYearsAgo) {
-        return { isValid: false, message: 'Data não pode ser anterior a 10 anos' };
-      }
-    }
-
-    return { isValid: true, message: 'Dados válidos' };
-  }
-
-  // Verificar se categoria existe
-  private async validateCategoryExists(userId: string, categoryId: string): Promise<boolean> {
-    try {
-      const categories = await this.categoryService.getCategoriesByUser(userId);
-      return categories.some(cat => cat.id === categoryId);
-    } catch (error) {
-      return false;
     }
   }
 }
